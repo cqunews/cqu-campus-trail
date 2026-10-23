@@ -37,3 +37,7 @@ __screenshots__/
 
 # Vite
 *.timestamp-*-*.mjs
+
+# Local configuration and runner credentials
+.env
+/toy-runner-home/

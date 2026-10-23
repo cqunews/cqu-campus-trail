@@ -3,8 +3,6 @@ name: Build and publish Bilibili Toy
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -16,11 +14,11 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '24.x'
           check-latest: true
@@ -30,7 +28,7 @@ jobs:
         run: yarn install --frozen-lockfile --non-interactive
       - name: Type-check and build
         run: yarn build --base=./
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: toy-dist
           path: dist/
@@ -40,6 +38,7 @@ jobs:
   publish:
     needs: build
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    # Node 24 Actions require Actions Runner >= 2.327.1.
     runs-on: [self-hosted, toy]
     environment: bilibili-toy
     timeout-minutes: 10
@@ -63,7 +62,7 @@ jobs:
           set -euo pipefail
           package_dir="$(mktemp -d "$RUNNER_TEMP/toy-dist.XXXXXX")"
           echo "TOY_DIST=$package_dir" >> "$GITHUB_ENV"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: toy-dist
           path: ${{ env.TOY_DIST }}
