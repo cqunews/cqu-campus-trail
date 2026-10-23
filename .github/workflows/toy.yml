@@ -1,0 +1,84 @@
+name: Build and publish Bilibili Toy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: toy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.12.0'
+      - name: Install Yarn Classic
+        run: npm install --global yarn@1.22.22
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: Type-check and build
+        run: yarn build --base=./
+      - uses: actions/upload-artifact@v4
+        with:
+          name: toy-dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: [self-hosted, toy]
+    environment: bilibili-toy
+    timeout-minutes: 10
+    concurrency:
+      group: bilibili-toy-publish
+      cancel-in-progress: false
+    env:
+      TOY_ID: ${{ vars.TOY_ID }}
+    steps:
+      - name: Check deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$TOY_ID" =~ ^[0-9]+$ ]]; then
+            echo '::error::Set the TOY_ID variable in the bilibili-toy environment to an existing numeric Toy ID.'
+            exit 1
+          fi
+      - name: Prepare clean artifact directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_dir="$(mktemp -d "$RUNNER_TEMP/toy-dist.XXXXXX")"
+          echo "TOY_DIST=$package_dir" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v4
+        with:
+          name: toy-dist
+          path: ${{ env.TOY_DIST }}
+      - name: Verify Toy login and submit update for review
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.local/bin:$PATH"
+          toy version
+          toy whoami
+          test -f "$TOY_DIST/index.html"
+          toy update "$TOY_ID" "$TOY_DIST" --yes
+      - name: Clean up downloaded artifact
+        if: always()
+        shell: bash
+        run: |
+          if [[ -n "${TOY_DIST:-}" && "$TOY_DIST" == "$RUNNER_TEMP"/toy-dist.* ]]; then
+            rm -rf -- "$TOY_DIST"
+          fi
