@@ -103,7 +103,9 @@ async function invoke(example: Example) {
       if (cameraPreview.value) cameraPreview.value.srcObject = null
       result = null
     } else {
-      result = await api[example.name](...args)
+      const method = api[example.name]
+      if (!method) throw new Error(`Toy SDK 未提供 ${example.name} 方法。`)
+      result = await method(...args)
     }
     if (example.name === 'requestCamera' && result instanceof MediaStream) {
       sharedStream.value = result
