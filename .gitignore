@@ -40,4 +40,6 @@ __screenshots__/
 
 # Local configuration and runner credentials
 .env
-/toy-runner-home/
+
+# unplugin-vue-components
+*.d.ts

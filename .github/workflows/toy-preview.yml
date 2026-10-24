@@ -1,0 +1,114 @@
+name: Build and preview Bilibili Toy PR
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: toy-preview-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24.x'
+          check-latest: true
+      - name: Install Yarn Classic
+        run: npm install --global yarn@1.22.22
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile --non-interactive
+      - name: Type-check and build for Toy
+        run: yarn build --base=./
+      - name: Check Toy entry point size
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f dist/index.html
+          if (( $(wc -c < dist/index.html) > 1048576 )); then
+            echo '::error::Toy entry index.html exceeds the 1 MB limit.'
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v6
+        with:
+          name: toy-preview-dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  preview:
+    needs: build
+    # Only trusted branches in this repository may use the logged-in runner.
+    # Fork PRs still build, but do not upload using the persistent Toy credentials.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, toy]
+    environment: bilibili-toy
+    timeout-minutes: 10
+    concurrency:
+      # Share the lock with main's publish job because both target the same Toy.
+      group: bilibili-toy-publish
+      cancel-in-progress: false
+    env:
+      TOY_ID: ${{ vars.TOY_ID }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    outputs:
+      preview_url: ${{ steps.preview.outputs.preview_url }}
+    steps:
+      - name: Check preview configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$TOY_ID" =~ ^[0-9]+$ ]]; then
+            echo '::error::Set the TOY_ID variable in the bilibili-toy environment to an existing numeric Toy ID.'
+            exit 1
+          fi
+      - name: Prepare clean artifact directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_dir="$(mktemp -d "$RUNNER_TEMP/toy-preview.XXXXXX")"
+          echo "TOY_DIST=$package_dir" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v7
+        with:
+          name: toy-preview-dist
+          path: ${{ env.TOY_DIST }}
+      - name: Upload Toy preview without submitting for review
+        id: preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.local/bin:$PATH"
+          toy version
+          toy update --help-json > /dev/null
+          toy whoami --json
+          test -f "$TOY_DIST/index.html"
+          # JSON mode without --yes uploads a preview and does not submit review.
+          result="$(toy update "$TOY_ID" "$TOY_DIST" --json </dev/null)"
+          printf '%s\n' "$result"
+          preview_url="$(printf '%s\n' "$result" | jq -er '.preview_url // .data.preview_url | select(type == "string")')"
+          if [[ ! "$preview_url" =~ ^https://www\.bilibili\.com/toy/preview/[^[:space:]]+$ ]]; then
+            echo '::error::Toy did not return a valid preview URL.'
+            exit 1
+          fi
+          echo "preview_url=$preview_url" >> "$GITHUB_OUTPUT"
+          printf 'Toy preview: %s\n' "$preview_url"
+          {
+            printf '## Toy preview for PR #%s\n\n' "$PR_NUMBER"
+            printf '[Open Toy preview](%s)\n\n' "$preview_url"
+            printf 'Uploaded for preview only; not submitted for review.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Clean up downloaded artifact
+        if: always()
+        shell: bash
+        run: |
+          if [[ -n "${TOY_DIST:-}" && "$TOY_DIST" == "$RUNNER_TEMP"/toy-preview.* ]]; then
+            rm -rf -- "$TOY_DIST"
+          fi
