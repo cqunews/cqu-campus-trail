@@ -622,6 +622,15 @@ declare namespace ToySDK {
     /** 批量删除云存储中指定的 key。key 格式非法时本地抛错。 */
     removeCloudStorage(keys: string[]): Promise<void>
 
+    /** 读取共享存档；参数和数据约束与云存储相同，但按玩家 + 存档隔离。 */
+    getSharedStorage(storageId: string, keys?: string[]): Promise<Record<string, string>>
+
+    /** 写入共享存档（upsert）。 */
+    setSharedStorage(storageId: string, items: Record<string, string>): Promise<void>
+
+    /** 删除当前玩家在共享存档中的指定键。 */
+    removeSharedStorage(storageId: string, keys: string[]): Promise<void>
+
     /**
      * 监听 Toy 容器状态变化。**仅 B站 App 内可用**，Web 端调用直接抛错。
      *
