@@ -105,7 +105,7 @@ async function invoke(example: Example) {
     } else {
       const method = api[example.name]
       if (!method) throw new Error(`Toy SDK 未提供 ${example.name} 方法。`)
-      result = await method(...args)
+      result = await method.apply(window.toy, args)
     }
     if (example.name === 'requestCamera' && result instanceof MediaStream) {
       sharedStream.value = result
