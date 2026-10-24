@@ -50,6 +50,9 @@ jobs:
     # Fork PRs still build, but do not upload using the persistent Toy credentials.
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, toy]
+    permissions:
+      contents: read
+      pull-requests: write
     environment: bilibili-toy
     timeout-minutes: 10
     concurrency:
@@ -105,6 +108,24 @@ jobs:
             printf '[Open Toy preview](%s)\n\n' "$preview_url"
             printf 'Uploaded for preview only; not submitted for review.\n'
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Add preview link to pull request description
+        uses: actions/github-script@v8
+        env:
+          PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
+        with:
+          script: |
+            const start = '<!-- toy-preview-link:start -->'
+            const end = '<!-- toy-preview-link:end -->'
+            const section = `${start}\n\n## Toy 预览\n\n[打开 Toy 预览](${process.env.PREVIEW_URL})\n\n${end}`
+            const { owner, repo } = context.repo
+            const pull_number = context.issue.number
+            const { data: pull } = await github.rest.pulls.get({ owner, repo, pull_number })
+            const body = pull.body ?? ''
+            const markerPattern = /<!-- toy-preview-link:start -->[\s\S]*?<!-- toy-preview-link:end -->/
+            const nextBody = markerPattern.test(body)
+              ? body.replace(markerPattern, section)
+              : `${body.trimEnd()}${body.trim() ? '\n\n' : ''}${section}`
+            await github.rest.pulls.update({ owner, repo, pull_number, body: nextBody })
       - name: Clean up downloaded artifact
         if: always()
         shell: bash
