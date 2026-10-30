@@ -46,3 +46,7 @@ yarn build
 ```sh
 yarn test:unit
 ```
+
+## Branch Practice
+
+- `koishiwater-branch` by koishiwater: practice change for the fork → pull request workflow.
