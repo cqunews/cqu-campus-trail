@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>躲避方块</title>
+<style>
+  body {
+    margin: 0; height: 100vh;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: #222; color: #fff; font-family: sans-serif;
+  }
+  canvas { background: #111; border: 2px solid #444; border-radius: 8px; }
+  #score { font-size: 20px; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+<div id="score">得分：0</div>
+<canvas id="game" width="400" height="600"></canvas>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+const W = canvas.width, H = canvas.height;
+
+// 玩家
+const player = { x: W / 2 - 20, y: H - 60, w: 40, h: 40, speed: 6 };
+
+// 键盘状态
+const keys = {};
+document.addEventListener('keydown', e => keys[e.key] = true);
+document.addEventListener('keyup',   e => keys[e.key] = false);
+
+let obstacles = [];
+let score = 0;
+let gameOver = false;
+let frame = 0;
+
+// 生成一个障碍物
+function spawnObstacle() {
+  const size = 20 + Math.random() * 40;
+  obstacles.push({
+    x: Math.random() * (W - size),
+    y: -size,
+    w: size, h: size,
+    speed: 2 + Math.random() * 3 + score * 0.02
+  });
+}
+
+// 每帧更新逻辑
+function update() {
+  if (gameOver) return;
+
+  // 左右移动
+  if (keys['ArrowLeft']  || keys['a']) player.x -= player.speed;
+  if (keys['ArrowRight'] || keys['d']) player.x += player.speed;
+  player.x = Math.max(0, Math.min(W - player.w, player.x));
+
+  // 定时生成障碍
+  frame++;
+  if (frame % 40 === 0) spawnObstacle();
+
+  // 更新障碍
+  for (let i = obstacles.length - 1; i >= 0; i--) {
+    const o = obstacles[i];
+    o.y += o.speed;
+
+    // 碰撞检测
+    if (o.x < player.x + player.w && o.x + o.w > player.x &&
+        o.y < player.y + player.h && o.y + o.h > player.y) {
+      gameOver = true;
+    }
+
+    // 掉出屏幕：移除 + 加分
+    if (o.y > H) {
+      obstacles.splice(i, 1);
+      score++;
+      scoreEl.textContent = '得分：' + score;
+    }
+  }
+}
+
+// 每帧绘制画面
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  ctx.fillStyle = '#4fc3f7';
+  ctx.fillRect(player.x, player.y, player.w, player.h);
+
+  ctx.fillStyle = '#ff5252';
+  obstacles.forEach(o => ctx.fillRect(o.x, o.y, o.w, o.h));
+
+  if (gameOver) {
+    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.font = '32px sans-serif';
+    ctx.fillText('游戏结束', W / 2, H / 2 - 20);
+    ctx.font = '20px sans-serif';
+    ctx.fillText('得分：' + score, W / 2, H / 2 + 20);
+    ctx.fillText('按 R 重新开始', W / 2, H / 2 + 60);
+  }
+}
+
+// 按 R 重开
+document.addEventListener('keydown', e => {
+  if ((e.key === 'r' || e.key === 'R') && gameOver) restart();
+});
+
+function restart() {
+  obstacles = [];
+  score = 0;
+  frame = 0;
+  gameOver = false;
+  player.x = W / 2 - 20;
+  scoreEl.textContent = '得分：0';
+}
+
+// 主循环
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
+// ai原作
